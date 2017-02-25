@@ -217,7 +217,7 @@ func (c *Client) Receive() {
 		case *Event:
 			c.lock.RLock()
 			if event, ok := c.events[msg.Subscription]; ok {
-				go event.handler(msg.Arguments, msg.ArgumentsKw)
+				go event.handler(event.topic, msg.Arguments, msg.ArgumentsKw)
 			} else {
 				log.Println("no handler registered for subscription:", msg.Subscription)
 			}
@@ -343,7 +343,7 @@ func (c *Client) waitOnListener(id ID) (msg Message, err error) {
 }
 
 // EventHandler handles a publish event.
-type EventHandler func(args []interface{}, kwargs map[string]interface{})
+type EventHandler func(topic string, args []interface{}, kwargs map[string]interface{})
 
 // Subscribe registers the EventHandler to be called for every message in the provided topic.
 func (c *Client) Subscribe(topic string, fn EventHandler) error {
