@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"gopkg.in/beatgammit/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 const (
@@ -46,7 +46,7 @@ func main() {
 	}
 
 	messages := make(chan message)
-	if err := c.Subscribe("chat", func(args []interface{}, kwargs map[string]interface{}) {
+	if err := c.Subscribe("chat", func(topic string, args []interface{}, kwargs map[string]interface{}) {
 		if len(args) == 2 {
 			if from, ok := args[0].(string); !ok {
 				log.Println("First argument not a string:", args[0])

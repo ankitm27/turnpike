@@ -8,8 +8,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/cornelk/turnpike"
 	"github.com/satori/go.uuid"
-	"gopkg.in/beatgammit/turnpike.v2"
 )
 
 // this is just an example, please don't actually use it
@@ -38,7 +38,7 @@ func (e *exampleAuth) Authenticate(c map[string]interface{}, signature string) (
 
 func main() {
 	turnpike.Debug()
-	s, err := turnpike.NewWebsocketServer(map[string]turnpike.Realm{
+	s, err := turnpike.NewWebsocketServer(map[string]*turnpike.Realm{
 		"turnpike.examples": {
 			CRAuthenticators: map[string]turnpike.CRAuthenticator{
 				"example-auth": &exampleAuth{password: "password"},

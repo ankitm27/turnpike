@@ -7,7 +7,7 @@ import (
 	"os"
 	"strconv"
 
-	"gopkg.in/beatgammit/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 func main() {
@@ -22,7 +22,7 @@ func main() {
 	}
 
 	quit := make(chan bool)
-	c.Subscribe("alarm.ring", func([]interface{}, map[string]interface{}) {
+	c.Subscribe("alarm.ring", func(string, []interface{}, map[string]interface{}) {
 		fmt.Println("The alarm rang!")
 		c.Close()
 		quit <- true

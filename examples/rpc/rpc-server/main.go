@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"gopkg.in/beatgammit/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 var client *turnpike.Client

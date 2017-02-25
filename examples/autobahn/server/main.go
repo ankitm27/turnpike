@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"gopkg.in/beatgammit/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 func main() {

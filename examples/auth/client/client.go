@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/cornelk/turnpike"
 	"github.com/howeyc/gopass"
-	"gopkg.in/beatgammit/turnpike.v2"
 )
 
 var password []byte
