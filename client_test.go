@@ -9,7 +9,7 @@ import (
 
 func newTestRouter() *defaultRouter {
 	router := NewDefaultRouter()
-	router.RegisterRealm(URI("turnpike.test"), Realm{})
+	router.RegisterRealm(URI("turnpike.test"), &Realm{})
 	return router.(*defaultRouter)
 }
 
@@ -47,7 +47,7 @@ func testAuthFunc(d map[string]interface{}, c map[string]interface{}) (string, m
 func TestJoinRealmWithAuth(t *testing.T) {
 	Convey("Given a server accepting client connections", t, func() {
 		router := newTestRouter()
-		router.RegisterRealm(URI("turnpike.test.auth"), Realm{
+		router.RegisterRealm(URI("turnpike.test.auth"), &Realm{
 			CRAuthenticators: map[string]CRAuthenticator{"testauth": &testCRAuthenticator{}},
 		})
 

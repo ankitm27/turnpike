@@ -38,7 +38,7 @@ func (e AuthenticationError) Error() string {
 type Router interface {
 	Accept(Peer) error
 	Close() error
-	RegisterRealm(URI, Realm) error
+	RegisterRealm(URI, *Realm) error
 	GetLocalPeer(URI, map[string]interface{}) (Peer, error)
 	AddSessionOpenCallback(func(uint, string))
 	AddSessionCloseCallback(func(uint, string))
@@ -88,7 +88,7 @@ func (r *defaultRouter) Close() error {
 	return nil
 }
 
-func (r *defaultRouter) RegisterRealm(uri URI, realm Realm) error {
+func (r *defaultRouter) RegisterRealm(uri URI, realm *Realm) error {
 	if _, ok := r.realms.Get(string(uri)); ok {
 		return RealmExistsError(uri)
 	}
