@@ -40,7 +40,7 @@ type localClient struct {
 
 func (r *Realm) getPeer(details map[string]interface{}) (Peer, error) {
 	peerA, peerB := localPipe()
-	sess := &Session{Peer: peerA, Id: NewID(), Details: details, kill: make(chan URI, 1)}
+	sess := &Session{Peer: peerA, ID: NewID(), Details: details, kill: make(chan URI, 1)}
 	if details == nil {
 		details = make(map[string]interface{})
 	}
@@ -185,7 +185,7 @@ func (r *Realm) doOne(c <-chan Message, sess *Session) bool {
 
 func (r *Realm) handleSession(sess *Session) {
 	r.lock.RLock()
-	r.clients.Set(string(sess.Id), sess)
+	r.clients.Set(string(sess.ID), sess)
 	r.localClient.onJoin(sess.Details)
 	r.lock.RUnlock()
 
@@ -193,10 +193,10 @@ func (r *Realm) handleSession(sess *Session) {
 		r.lock.RLock()
 		defer r.lock.RUnlock()
 
-		r.clients.Remove(string(sess.Id))
+		r.clients.Remove(string(sess.ID))
 		r.Broker.RemoveSession(sess)
 		r.Dealer.RemoveSession(sess)
-		r.localClient.onLeave(sess.Id)
+		r.localClient.onLeave(sess.ID)
 	}()
 	c := sess.Receive()
 	// TODO: what happens if the realm is closed?

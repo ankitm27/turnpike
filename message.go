@@ -183,7 +183,7 @@ func (msg *Hello) MessageType() MessageType {
 
 // [WELCOME, Session|id, Details|dict]
 type Welcome struct {
-	Id      ID
+	ID      ID
 	Details map[string]interface{}
 }
 

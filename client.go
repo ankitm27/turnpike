@@ -392,7 +392,7 @@ func (c *Client) Unsubscribe(topic string) error {
 	}
 	c.lock.RUnlock()
 	if !found {
-		return fmt.Errorf("Event %s is not registered with this client.", topic)
+		return fmt.Errorf("Event %s is not registered with this client", topic)
 	}
 
 	id := NewID()
@@ -487,7 +487,7 @@ func (c *Client) Unregister(procedure string) error {
 	}
 	c.lock.RUnlock()
 	if !found {
-		return fmt.Errorf("Procedure %s is not registered with this client.", procedure)
+		return fmt.Errorf("Procedure %s is not registered with this client", procedure)
 	}
 	id := NewID()
 	c.registerListener(id)

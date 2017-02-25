@@ -23,7 +23,7 @@ type defaultBroker struct {
 	subscriptions map[ID]URI
 	subscribers   map[*Session][]ID
 
-	lastRequestId ID
+	lastRequestID ID
 
 	sync.RWMutex
 }
@@ -38,13 +38,13 @@ func NewDefaultBroker() Broker {
 	}
 }
 
-func (br *defaultBroker) nextRequestId() ID {
-	br.lastRequestId++
-	if br.lastRequestId > MAX_REQUEST_ID {
-		br.lastRequestId = 1
+func (br *defaultBroker) nextRequestID() ID {
+	br.lastRequestID++
+	if br.lastRequestID > MAXREQUESTID {
+		br.lastRequestID = 1
 	}
 
-	return br.lastRequestId
+	return br.lastRequestID
 }
 
 // Publish sends a message to all subscribed clients except for the sender.
@@ -93,7 +93,7 @@ func (br *defaultBroker) Subscribe(sess *Session, msg *Subscribe) {
 	if _, ok := br.routes[msg.Topic]; !ok {
 		br.routes[msg.Topic] = make(map[ID]Sender)
 	}
-	id := br.nextRequestId()
+	id := br.nextRequestID()
 	br.routes[msg.Topic][id] = sess.Peer
 	br.subscriptions[id] = msg.Topic
 

@@ -27,14 +27,14 @@ func (e NoSuchRealmError) Error() string {
 	return "no such realm: " + string(e)
 }
 
-// Peer was unable to authenticate
+// AuthenticationError means the peer was unable to authenticate
 type AuthenticationError string
 
 func (e AuthenticationError) Error() string {
 	return "authentication error: " + string(e)
 }
 
-// A Router handles new Peers and routes requests to the requested Realm.
+// Router handles new Peers and routes requests to the requested Realm.
 type Router interface {
 	Accept(Peer) error
 	Close() error
@@ -142,7 +142,7 @@ func (r *defaultRouter) Accept(client Peer) error {
 		return AuthenticationError(err.Error())
 	}
 
-	welcome.Id = NewID()
+	welcome.ID = NewID()
 
 	if welcome.Details == nil {
 		welcome.Details = make(map[string]interface{})
@@ -156,25 +156,25 @@ func (r *defaultRouter) Accept(client Peer) error {
 	if err := client.Send(welcome); err != nil {
 		return err
 	}
-	log.Println("Established session:", welcome.Id)
+	log.Println("Established session:", welcome.ID)
 
 	// session details
-	welcome.Details["session"] = welcome.Id
+	welcome.Details["session"] = welcome.ID
 	welcome.Details["realm"] = hello.Realm
 	sess := &Session{
 		Peer:    client,
-		Id:      welcome.Id,
+		ID:      welcome.ID,
 		Details: welcome.Details,
 		kill:    make(chan URI, 1),
 	}
 	for _, callback := range r.sessionOpenCallbacks {
-		go callback(uint(sess.Id), string(hello.Realm))
+		go callback(uint(sess.ID), string(hello.Realm))
 	}
 	go func() {
 		realm.handleSession(sess)
 		sess.Close()
 		for _, callback := range r.sessionCloseCallbacks {
-			go callback(uint(sess.Id), string(hello.Realm))
+			go callback(uint(sess.ID), string(hello.Realm))
 		}
 	}()
 	return nil

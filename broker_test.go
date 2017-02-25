@@ -59,16 +59,16 @@ func TestSubscribe(t *testing.T) {
 func TestBrokerNextRequestId(t *testing.T) {
 	Convey("nextRequestId called multiple times", t, func() {
 		broker := NewDefaultBroker().(*defaultBroker)
-		id1 := broker.nextRequestId()
-		id2 := broker.nextRequestId()
+		id1 := broker.nextRequestID()
+		id2 := broker.nextRequestID()
 
 		So(id1, ShouldNotEqual, id2)
 	})
 
 	Convey("nextRequestId should roll over", t, func() {
 		broker := NewDefaultBroker().(*defaultBroker)
-		broker.lastRequestId = MAX_REQUEST_ID
-		id := broker.nextRequestId()
+		broker.lastRequestID = MAXREQUESTID
+		id := broker.nextRequestID()
 
 		So(id, ShouldEqual, 1)
 	})
@@ -82,8 +82,8 @@ func TestMultipleSubscribe(t *testing.T) {
 		broker := NewDefaultBroker().(*defaultBroker)
 		for i := 0; i < SUBSCRIBERS; i++ {
 			subscriber := &TestPeer{}
-			sess := &Session{Peer: subscriber, Id: NewID()}
-			msg := &Subscribe{Request: sess.NextRequestId(), Topic: TOPIC}
+			sess := &Session{Peer: subscriber, ID: NewID()}
+			msg := &Subscribe{Request: sess.NextRequestID(), Topic: TOPIC}
 			broker.Subscribe(sess, msg)
 		}
 

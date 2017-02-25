@@ -14,9 +14,9 @@ import (
 type Serialization int
 
 const (
-	// Use JSON-encoded strings as a payload.
+	// JSON encoded strings as a payload.
 	JSON Serialization = iota
-	// Use msgpack-encoded strings as a payload.
+	// MSGPACK encoded strings as a payload.
 	MSGPACK
 )
 
@@ -66,9 +66,8 @@ func convert(val reflect.Value, typ reflect.Type) (reflect.Value, error) {
 	if !valType.AssignableTo(typ) {
 		if valType.ConvertibleTo(typ) {
 			return val.Convert(typ), nil
-		} else {
-			return val, fmt.Errorf("type %s not convertible to %s", valType.Kind(), typ.Kind())
 		}
+		return val, fmt.Errorf("type %s not convertible to %s", valType.Kind(), typ.Kind())
 	}
 	return val, nil
 }
@@ -207,7 +206,7 @@ func (s *JSONSerializer) Deserialize(data []byte) (Message, error) {
 	return apply(msgType, arr)
 }
 
-// BindaryData is a byte array that can be marshalled and unmarshalled according
+// BinaryData is a byte array that can be marshalled and unmarshalled according
 // to WAMP specifications:
 // https://github.com/tavendo/WAMP/blob/master/spec/basic.md#binary-conversion-of-json-strings
 //

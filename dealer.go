@@ -28,7 +28,7 @@ type remoteProcedure struct {
 
 type rpcRequest struct {
 	caller    *Session
-	requestId ID
+	requestID ID
 }
 
 type defaultDealer struct {
@@ -74,15 +74,15 @@ func (d *defaultDealer) Register(sess *Session, msg *Register) {
 		return
 	}
 
-	registrationId := NewID()
-	d.procedures[msg.Procedure] = remoteProcedure{sess, msg.Procedure, registrationId}
-	d.registrations[registrationId] = msg.Procedure
+	registrationID := NewID()
+	d.procedures[msg.Procedure] = remoteProcedure{sess, msg.Procedure, registrationID}
+	d.registrations[registrationID] = msg.Procedure
 
 	// d.addCalleeRegistration(sess, reg)
-	log.Printf("registered procedure %v [%v]", registrationId, msg.Procedure)
+	log.Printf("registered procedure %v [%v]", registrationID, msg.Procedure)
 	sess.Peer.Send(&Registered{
 		Request:      msg.Request,
-		Registration: registrationId,
+		Registration: registrationID,
 	})
 }
 
@@ -128,7 +128,7 @@ func (d *defaultDealer) Call(sess *Session, msg *Call) {
 		// everything checks out, make the invocation request
 		// TODO: make the Request ID specific to the caller
 		// d.calls[msg.Request] = sess
-		invocationID := rproc.Endpoint.NextRequestId()
+		invocationID := rproc.Endpoint.NextRequestID()
 		if d.invocations[rproc.Endpoint] == nil {
 			d.invocations[rproc.Endpoint] = make(map[ID]rpcRequest)
 		}
@@ -154,7 +154,7 @@ func (d *defaultDealer) Yield(sess *Session, msg *Yield) {
 	defer d.invocationLock.Unlock()
 
 	if d.invocations[sess] == nil {
-		log.Println("received YIELD message from unknown session:", sess.Id)
+		log.Println("received YIELD message from unknown session:", sess.ID)
 		return
 	}
 	if call, ok := d.invocations[sess][msg.Request]; !ok {
@@ -166,12 +166,12 @@ func (d *defaultDealer) Yield(sess *Session, msg *Yield) {
 
 		// return the result to the caller
 		go call.caller.Send(&Result{
-			Request:     call.requestId,
+			Request:     call.requestID,
 			Details:     map[string]interface{}{},
 			Arguments:   msg.Arguments,
 			ArgumentsKw: msg.ArgumentsKw,
 		})
-		log.Printf("returned YIELD %v to caller as RESULT %v", msg.Request, call.requestId)
+		log.Printf("returned YIELD %v to caller as RESULT %v", msg.Request, call.requestID)
 	}
 
 	if len(d.invocations[sess]) == 0 {
@@ -184,7 +184,7 @@ func (d *defaultDealer) Error(sess *Session, msg *Error) {
 	defer d.invocationLock.Unlock()
 
 	if d.invocations[sess] == nil {
-		log.Println("received ERROR message from unknown session:", sess.Id)
+		log.Println("received ERROR message from unknown session:", sess.ID)
 		return
 	}
 	if call, ok := d.invocations[sess][msg.Request]; !ok {
@@ -195,13 +195,13 @@ func (d *defaultDealer) Error(sess *Session, msg *Error) {
 		// return an error to the caller
 		go call.caller.Peer.Send(&Error{
 			Type:        CALL,
-			Request:     call.requestId,
+			Request:     call.requestID,
 			Error:       msg.Error,
 			Details:     make(map[string]interface{}),
 			Arguments:   msg.Arguments,
 			ArgumentsKw: msg.ArgumentsKw,
 		})
-		log.Printf("returned ERROR %v to caller as ERROR %v", msg.Request, call.requestId)
+		log.Printf("returned ERROR %v to caller as ERROR %v", msg.Request, call.requestID)
 	}
 
 	if len(d.invocations[sess]) == 0 {

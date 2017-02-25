@@ -10,7 +10,7 @@ const (
 
 	// Peer provided an incorrect URI for any URI-based attribute of WAMP message,
 	// such as realm, topic or procedure.
-	ErrInvalidUri = URI("wamp.error.invalid_uri")
+	ErrInvalidURI = URI("wamp.error.invalid_uri")
 
 	// A Dealer could not perform a call, since no procedure is currently
 	// registered under the given URI.

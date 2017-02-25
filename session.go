@@ -5,30 +5,30 @@ import (
 )
 
 const (
-	MAX_REQUEST_ID = 1 << 53
+	MAXREQUESTID = 1 << 53
 )
 
 // Session represents an active WAMP session
 type Session struct {
 	Peer
-	Id      ID
+	ID      ID
 	Details map[string]interface{}
 
-	lastRequestId ID
+	lastRequestID ID
 	kill          chan URI
 }
 
 func (s Session) String() string {
-	return fmt.Sprintf("%d", s.Id)
+	return fmt.Sprintf("%d", s.ID)
 }
 
-func (s *Session) NextRequestId() ID {
-	s.lastRequestId++
+func (s *Session) NextRequestID() ID {
+	s.lastRequestID++
 	// max value is 2^53
-	if s.lastRequestId > MAX_REQUEST_ID {
-		s.lastRequestId = 1
+	if s.lastRequestID > MAXREQUESTID {
+		s.lastRequestID = 1
 	}
-	return s.lastRequestId
+	return s.lastRequestID
 }
 
 // localPipe creates two linked sessions. Messages sent to one will
