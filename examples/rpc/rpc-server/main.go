@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"gopkg.in/jcelliott/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 var client *turnpike.Client
@@ -17,8 +17,8 @@ func main() {
 		Handler: s,
 		Addr:    ":8000",
 	}
-	client, _ = s.GetLocalClient("turnpike.examples")
-	if err := client.Register("alarm.set", alarmSet); err != nil {
+	client, _ = s.GetLocalClient("turnpike.examples", nil)
+	if err := client.BasicRegister("alarm.set", alarmSet); err != nil {
 		panic(err)
 	}
 	log.Println("turnpike server starting on port 8000")

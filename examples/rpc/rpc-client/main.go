@@ -7,23 +7,24 @@ import (
 	"os"
 	"strconv"
 
-	"gopkg.in/jcelliott/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 func main() {
 	turnpike.Debug()
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/")
+	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = c.JoinRealm("turnpike.examples", turnpike.ALLROLES, nil)
+	_, err = c.JoinRealm("turnpike.examples", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	quit := make(chan bool)
-	c.Subscribe("alarm.ring", func([]interface{}, map[string]interface{}) {
+	c.Subscribe("alarm.ring", func(string, []interface{}, map[string]interface{}) {
 		fmt.Println("The alarm rang!")
+		c.Close()
 		quit <- true
 	})
 	fmt.Print("Enter the timer duration: ")

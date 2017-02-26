@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/cornelk/turnpike"
 	"github.com/howeyc/gopass"
-	"gopkg.in/jcelliott/turnpike.v2"
 )
 
 var password []byte
@@ -29,15 +29,19 @@ func main() {
 	turnpike.Debug()
 	fmt.Println("Hint: the password is 'password'")
 	fmt.Print("Password: ")
-	password = gopass.GetPasswd()
 
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/ws")
+	var err error
+	password, err = gopass.GetPasswd()
+	if err != nil {
+		log.Fatal("Error getting the password:", err)
+	}
+
+	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/ws", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	details := map[string]interface{}{"authmethods": []string{"example-auth"}}
-	auth := map[string]turnpike.AuthFunc{"example-auth": exampleAuthFunc}
-	_, err = c.JoinRealmCRA("turnpike.examples", turnpike.ALLROLES, details, auth)
+	c.Auth = map[string]turnpike.AuthFunc{"example-auth": exampleAuthFunc}
+	_, err = c.JoinRealm("turnpike.examples", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

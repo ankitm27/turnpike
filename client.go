@@ -1,23 +1,10 @@
 package turnpike
 
 import (
+	"crypto/tls"
 	"fmt"
+	"sync"
 	"time"
-)
-
-type Role int
-
-const (
-	// This client can publish events
-	PUBLISHER Role = 1 << iota
-	// This client can subscribe to events
-	SUBSCRIBER
-	// This client can register RPC functions
-	CALLEE
-	// This client can call RPC functions
-	CALLER
-	// This client can do all of the above
-	ALLROLES = PUBLISHER | SUBSCRIBER | CALLEE | CALLER
 )
 
 var (
@@ -35,7 +22,7 @@ var (
 	}
 	goodbyeClient = &Goodbye{
 		Details: map[string]interface{}{},
-		Reason:  WAMP_ERROR_CLOSE_REALM,
+		Reason:  ErrCloseRealm,
 	}
 )
 
@@ -44,16 +31,32 @@ type Client struct {
 	Peer
 	// ReceiveTimeout is the amount of time that the client will block waiting for a response from the router.
 	ReceiveTimeout time.Duration
-	// roles          int
+	// Auth is a map of WAMP authmethods to functions that will handle each auth type
+	Auth map[string]AuthFunc
+	// ReceiveDone is notified when the client's connection to the router is lost.
+	ReceiveDone  chan bool
 	listeners    map[ID]chan Message
-	events       map[ID]EventHandler
-	procedures   map[ID]MethodHandler
+	events       map[ID]*eventDesc
+	procedures   map[ID]*procedureDesc
 	requestCount uint
+
+	lock sync.RWMutex
 }
 
-// Creates a new websocket client.
-func NewWebsocketClient(serialization Serialization, url string) (*Client, error) {
-	p, err := NewWebsocketPeer(serialization, url, "")
+type procedureDesc struct {
+	name    string
+	handler MethodHandler
+}
+
+type eventDesc struct {
+	topic   string
+	handler EventHandler
+}
+
+// NewWebsocketClient creates a new websocket client connected to the specified
+// `url` and using the specified `serialization`.
+func NewWebsocketClient(serialization Serialization, url string, tlscfg *tls.Config) (*Client, error) {
+	p, err := NewWebsocketPeer(serialization, url, "", tlscfg)
 	if err != nil {
 		return nil, err
 	}
@@ -64,22 +67,24 @@ func NewWebsocketClient(serialization Serialization, url string) (*Client, error
 func NewClient(p Peer) *Client {
 	c := &Client{
 		Peer:           p,
-		ReceiveTimeout: 5 * time.Second,
-		// roles:          roles,
-		listeners:    make(map[ID]chan Message),
-		events:       make(map[ID]EventHandler),
-		procedures:   make(map[ID]MethodHandler),
-		requestCount: 0,
+		ReceiveTimeout: 10 * time.Second,
+		listeners:      make(map[ID]chan Message),
+		events:         make(map[ID]*eventDesc),
+		procedures:     make(map[ID]*procedureDesc),
+		requestCount:   0,
 	}
 	return c
 }
 
 // JoinRealm joins a WAMP realm, but does not handle challenge/response authentication.
-func (c *Client) JoinRealm(realm string, roles Role, details map[string]interface{}) (map[string]interface{}, error) {
+func (c *Client) JoinRealm(realm string, details map[string]interface{}) (map[string]interface{}, error) {
 	if details == nil {
 		details = map[string]interface{}{}
 	}
-	details["roles"] = createRolesMap(roles)
+	details["roles"] = clientRoles()
+	if c.Auth != nil && len(c.Auth) > 0 {
+		return c.joinRealmCRA(realm, details)
+	}
 	if err := c.Send(&Hello{Realm: URI(realm), Details: details}); err != nil {
 		c.Peer.Close()
 		return nil, err
@@ -101,15 +106,13 @@ func (c *Client) JoinRealm(realm string, roles Role, details map[string]interfac
 // signature string and a details map
 type AuthFunc func(map[string]interface{}, map[string]interface{}) (string, map[string]interface{}, error)
 
-// JoinRealmCRA joins a WAMP realm and handles challenge/response authentication.
-func (c *Client) JoinRealmCRA(realm string, roles Role, details map[string]interface{}, auth map[string]AuthFunc) (map[string]interface{}, error) {
-	if auth == nil || len(auth) == 0 {
-		return nil, fmt.Errorf("no authentication methods provided")
+// joinRealmCRA joins a WAMP realm and handles challenge/response authentication.
+func (c *Client) joinRealmCRA(realm string, details map[string]interface{}) (map[string]interface{}, error) {
+	authmethods := []interface{}{}
+	for m := range c.Auth {
+		authmethods = append(authmethods, m)
 	}
-	if details == nil || len(details) == 0 {
-		return nil, fmt.Errorf("no details map provided")
-	}
-	details["roles"] = createRolesMap(roles)
+	details["authmethods"] = authmethods
 	if err := c.Send(&Hello{Realm: URI(realm), Details: details}); err != nil {
 		c.Peer.Close()
 		return nil, err
@@ -121,7 +124,7 @@ func (c *Client) JoinRealmCRA(realm string, roles Role, details map[string]inter
 		c.Send(abortUnexpectedMsg)
 		c.Peer.Close()
 		return nil, fmt.Errorf(formatUnexpectedMessage(msg, CHALLENGE))
-	} else if authFunc, ok := auth[challenge.AuthMethod]; !ok {
+	} else if authFunc, ok := c.Auth[challenge.AuthMethod]; !ok {
 		c.Send(abortNoAuthHandler)
 		c.Peer.Close()
 		return nil, fmt.Errorf("no auth handler for method: %s", challenge.AuthMethod)
@@ -146,21 +149,13 @@ func (c *Client) JoinRealmCRA(realm string, roles Role, details map[string]inter
 	}
 }
 
-func createRolesMap(roles Role) map[string]interface{} {
-	rolesMap := make(map[string]interface{})
-	if roles&PUBLISHER == PUBLISHER {
-		rolesMap["publisher"] = make(map[string]interface{})
+func clientRoles() map[string]map[string]interface{} {
+	return map[string]map[string]interface{}{
+		"publisher":  make(map[string]interface{}),
+		"subscriber": make(map[string]interface{}),
+		"callee":     make(map[string]interface{}),
+		"caller":     make(map[string]interface{}),
 	}
-	if roles&SUBSCRIBER == SUBSCRIBER {
-		rolesMap["subscriber"] = make(map[string]interface{})
-	}
-	if roles&CALLEE == CALLEE {
-		rolesMap["callee"] = make(map[string]interface{})
-	}
-	if roles&CALLER == CALLER {
-		rolesMap["caller"] = make(map[string]interface{})
-	}
-	return rolesMap
 }
 
 func formatUnexpectedMessage(msg Message, expected MessageType) string {
@@ -188,20 +183,28 @@ func formatUnknownMap(m map[string]interface{}) string {
 }
 
 // LeaveRealm leaves the current realm without closing the connection to the server.
-func (c *Client) LeaveRealm() {
-	c.Send(goodbyeClient)
+func (c *Client) LeaveRealm() error {
+	if err := c.Send(goodbyeClient); err != nil {
+		return fmt.Errorf("error leaving realm: %v", err)
+	}
+	return nil
 }
 
 // Close closes the connection to the server.
-func (c *Client) Close() {
-	c.Send(goodbyeClient)
-	c.Peer.Close()
+func (c *Client) Close() error {
+	if err := c.LeaveRealm(); err != nil {
+		return err
+	}
+	if err := c.Peer.Close(); err != nil {
+		return fmt.Errorf("error closing client connection: %v", err)
+	}
+	return nil
 }
 
-func (c *Client) nextID() ID {
-	c.requestCount++
-	return ID(c.requestCount)
-}
+// func (c *Client) nextID() ID {
+// 	c.requestCount++
+// 	return ID(c.requestCount)
+// }
 
 // Receive handles messages from the server until this client disconnects.
 //
@@ -212,47 +215,62 @@ func (c *Client) Receive() {
 		switch msg := msg.(type) {
 
 		case *Event:
-			if fn, ok := c.events[msg.Subscription]; ok {
-				go fn(msg.Arguments, msg.ArgumentsKw)
+			c.lock.RLock()
+			if event, ok := c.events[msg.Subscription]; ok {
+				go event.handler(event.topic, msg.Arguments, msg.ArgumentsKw)
 			} else {
 				log.Println("no handler registered for subscription:", msg.Subscription)
 			}
+			c.lock.RUnlock()
 
 		case *Invocation:
 			c.handleInvocation(msg)
 
 		case *Registered:
 			c.notifyListener(msg, msg.Request)
-
 		case *Subscribed:
 			c.notifyListener(msg, msg.Request)
-
+		case *Unsubscribed:
+			c.notifyListener(msg, msg.Request)
+		case *Unregistered:
+			c.notifyListener(msg, msg.Request)
 		case *Result:
 			c.notifyListener(msg, msg.Request)
-
 		case *Error:
 			c.notifyListener(msg, msg.Request)
+
+		case *Goodbye:
+			log.Println("client received Goodbye message")
+			break
 
 		default:
 			log.Println("unhandled message:", msg.MessageType(), msg)
 		}
 	}
-	log.Fatal("Receive buffer closed")
+	log.Println("client closed")
+
+	if c.ReceiveDone != nil {
+		c.ReceiveDone <- true
+	}
 }
 
-func (c *Client) notifyListener(msg Message, requestId ID) {
+func (c *Client) notifyListener(msg Message, requestID ID) {
 	// pass in the request ID so we don't have to do any type assertion
-	if l, ok := c.listeners[requestId]; ok {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	if l, ok := c.listeners[requestID]; ok {
 		l <- msg
 	} else {
-		log.Println("no listener for message", msg.MessageType(), requestId)
+		log.Println("no listener for message", msg.MessageType(), requestID)
 	}
 }
 
 func (c *Client) handleInvocation(msg *Invocation) {
-	if fn, ok := c.procedures[msg.Registration]; ok {
+	c.lock.RLock()
+	if proc, ok := c.procedures[msg.Registration]; ok {
+		c.lock.RUnlock()
 		go func() {
-			result := fn(msg.Arguments, msg.ArgumentsKw)
+			result := proc.handler(msg.Arguments, msg.ArgumentsKw, msg.Details)
 
 			var tosend Message
 			tosend = &Yield{
@@ -274,42 +292,66 @@ func (c *Client) handleInvocation(msg *Invocation) {
 			}
 
 			if err := c.Send(tosend); err != nil {
-				log.Fatal(err)
+				log.Println("error sending message:", err)
 			}
 		}()
 	} else {
+		c.lock.RUnlock()
 		log.Println("no handler registered for registration:", msg.Registration)
+		if err := c.Send(&Error{
+			Type:    INVOCATION,
+			Request: msg.Request,
+			Details: make(map[string]interface{}),
+			Error:   URI(fmt.Sprintf("no handler for registration: %v", msg.Registration)),
+		}); err != nil {
+			log.Println("error sending message:", err)
+		}
 	}
 }
 
 func (c *Client) registerListener(id ID) {
 	log.Println("register listener:", id)
 	wait := make(chan Message, 1)
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.listeners[id] = wait
+}
+
+func (c *Client) unregisterListener(id ID) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	log.Println("unregister listener:", id)
+	delete(c.listeners, id)
 }
 
 func (c *Client) waitOnListener(id ID) (msg Message, err error) {
 	log.Println("wait on listener:", id)
-	if wait, ok := c.listeners[id]; !ok {
+	c.lock.RLock()
+	wait, ok := c.listeners[id]
+	c.lock.RUnlock()
+	if !ok {
 		return nil, fmt.Errorf("unknown listener ID: %v", id)
-	} else {
-		select {
-		case msg = <-wait:
-			return
-		case <-time.After(c.ReceiveTimeout):
-			err = fmt.Errorf("timeout while waiting for message")
-			return
-		}
+	}
+	select {
+	case msg = <-wait:
+		return
+	case <-time.After(c.ReceiveTimeout):
+		err = fmt.Errorf("timeout while waiting for message")
+		return
 	}
 }
 
 // EventHandler handles a publish event.
-type EventHandler func(args []interface{}, kwargs map[string]interface{})
+type EventHandler func(topic string, args []interface{}, kwargs map[string]interface{})
 
 // Subscribe registers the EventHandler to be called for every message in the provided topic.
 func (c *Client) Subscribe(topic string, fn EventHandler) error {
-	id := c.nextID()
+	id := NewID()
 	c.registerListener(id)
+	// TODO: figure out where to clean this up
+	// defer c.unregisterListener(id)
+
 	sub := &Subscribe{
 		Request: id,
 		Options: make(map[string]interface{}),
@@ -328,21 +370,73 @@ func (c *Client) Subscribe(topic string, fn EventHandler) error {
 		return fmt.Errorf(formatUnexpectedMessage(msg, SUBSCRIBED))
 	} else {
 		// register the event handler with this subscription
-		c.events[subscribed.Subscription] = fn
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		c.events[subscribed.Subscription] = &eventDesc{topic, fn}
 	}
 	return nil
 }
 
-// MethodHandler is an RPC endpoint.
-type MethodHandler func(args []interface{}, kwargs map[string]interface{}) (result *CallResult)
+// Unsubscribe removes the registered EventHandler from the topic.
+func (c *Client) Unsubscribe(topic string) error {
+	var (
+		subscriptionID ID
+		found          bool
+	)
+	c.lock.RLock()
+	for id, desc := range c.events {
+		if desc.topic == topic {
+			subscriptionID = id
+			found = true
+		}
+	}
+	c.lock.RUnlock()
+	if !found {
+		return fmt.Errorf("Event %s is not registered with this client", topic)
+	}
 
-// Register registers a procedure with the router.
-func (c *Client) Register(procedure string, fn MethodHandler) error {
-	id := c.nextID()
+	id := NewID()
 	c.registerListener(id)
+	defer c.unregisterListener(id)
+
+	sub := &Unsubscribe{
+		Request:      id,
+		Subscription: subscriptionID,
+	}
+	if err := c.Send(sub); err != nil {
+		return err
+	}
+	// wait to receive UNSUBSCRIBED message
+	msg, err := c.waitOnListener(id)
+	if err != nil {
+		return err
+	} else if e, ok := msg.(*Error); ok {
+		return fmt.Errorf("error unsubscribing to topic '%v': %v", topic, e.Error)
+	} else if _, ok := msg.(*Unsubscribed); !ok {
+		return fmt.Errorf(formatUnexpectedMessage(msg, UNSUBSCRIBED))
+	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.events, subscriptionID)
+	return nil
+}
+
+// MethodHandler is an RPC endpoint.
+type MethodHandler func(
+	args []interface{}, kwargs map[string]interface{}, details map[string]interface{},
+) (result *CallResult)
+
+// Register registers a MethodHandler procedure with the router.
+func (c *Client) Register(procedure string, fn MethodHandler, options map[string]interface{}) error {
+	id := NewID()
+	c.registerListener(id)
+	// TODO: figure out where to clean this up
+	// defer c.unregisterListener(id)
+
 	register := &Register{
 		Request:   id,
-		Options:   make(map[string]interface{}),
+		Options:   options,
 		Procedure: URI(procedure),
 	}
 	if err := c.Send(register); err != nil {
@@ -354,20 +448,79 @@ func (c *Client) Register(procedure string, fn MethodHandler) error {
 	if err != nil {
 		return err
 	} else if e, ok := msg.(*Error); ok {
-		return fmt.Errorf("error registering to procedure '%v': %v", procedure, e.Error)
+		return fmt.Errorf("error registering procedure '%v': %v", procedure, e.Error)
 	} else if registered, ok := msg.(*Registered); !ok {
 		return fmt.Errorf(formatUnexpectedMessage(msg, REGISTERED))
 	} else {
 		// register the event handler with this registration
-		c.procedures[registered.Registration] = fn
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		c.procedures[registered.Registration] = &procedureDesc{procedure, fn}
 	}
+	return nil
+}
+
+// BasicMethodHandler is an RPC endpoint that doesn't expect the `Details` map
+type BasicMethodHandler func(args []interface{}, kwargs map[string]interface{}) (result *CallResult)
+
+// BasicRegister registers a BasicMethodHandler procedure with the router
+func (c *Client) BasicRegister(procedure string, fn BasicMethodHandler) error {
+	wrap := func(args []interface{}, kwargs map[string]interface{},
+		details map[string]interface{}) (result *CallResult) {
+		return fn(args, kwargs)
+	}
+	return c.Register(procedure, wrap, make(map[string]interface{}))
+}
+
+// Unregister removes a procedure with the router
+func (c *Client) Unregister(procedure string) error {
+	var (
+		procedureID ID
+		found       bool
+	)
+	c.lock.RLock()
+	for id, p := range c.procedures {
+		if p.name == procedure {
+			procedureID = id
+			found = true
+		}
+	}
+	c.lock.RUnlock()
+	if !found {
+		return fmt.Errorf("Procedure %s is not registered with this client", procedure)
+	}
+	id := NewID()
+	c.registerListener(id)
+	defer c.unregisterListener(id)
+
+	unregister := &Unregister{
+		Request:      id,
+		Registration: procedureID,
+	}
+	if err := c.Send(unregister); err != nil {
+		return err
+	}
+
+	// wait to receive UNREGISTERED message
+	msg, err := c.waitOnListener(id)
+	if err != nil {
+		return err
+	} else if e, ok := msg.(*Error); ok {
+		return fmt.Errorf("error unregister to procedure '%v': %v", procedure, e.Error)
+	} else if _, ok := msg.(*Unregistered); !ok {
+		return fmt.Errorf(formatUnexpectedMessage(msg, UNREGISTERED))
+	}
+	// register the event handler with this unregistration
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.procedures, procedureID)
 	return nil
 }
 
 // Publish publishes an EVENT to all subscribed peers.
 func (c *Client) Publish(topic string, args []interface{}, kwargs map[string]interface{}) error {
 	return c.Send(&Publish{
-		Request:     c.nextID(),
+		Request:     NewID(),
 		Options:     make(map[string]interface{}),
 		Topic:       URI(topic),
 		Arguments:   args,
@@ -375,10 +528,20 @@ func (c *Client) Publish(topic string, args []interface{}, kwargs map[string]int
 	})
 }
 
+type RPCError struct {
+	ErrorMessage *Error
+	Procedure    string
+}
+
+func (rpc RPCError) Error() string {
+	return fmt.Sprintf("error calling procedure '%v': %v: %v: %v", rpc.Procedure, rpc.ErrorMessage.Error, rpc.ErrorMessage.Arguments, rpc.ErrorMessage.ArgumentsKw)
+}
+
 // Call calls a procedure given a URI.
-func (c *Client) Call(procedure string, args []interface{}, kwargs map[string]interface{}) (Message, error) {
-	id := c.nextID()
+func (c *Client) Call(procedure string, args []interface{}, kwargs map[string]interface{}) (*Result, error) {
+	id := NewID()
 	c.registerListener(id)
+	defer c.unregisterListener(id)
 
 	call := &Call{
 		Request:     id,
@@ -396,10 +559,10 @@ func (c *Client) Call(procedure string, args []interface{}, kwargs map[string]in
 	if err != nil {
 		return nil, err
 	} else if e, ok := msg.(*Error); ok {
-		return nil, fmt.Errorf("error registering to procedure '%v': %v", procedure, e.Error)
-	} else if _, ok := msg.(*Result); !ok {
+		return nil, RPCError{e, procedure}
+	} else if result, ok := msg.(*Result); !ok {
 		return nil, fmt.Errorf(formatUnexpectedMessage(msg, RESULT))
 	} else {
-		return msg, nil
+		return result, nil
 	}
 }

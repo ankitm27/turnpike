@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"gopkg.in/jcelliott/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 const (
@@ -36,17 +36,17 @@ func main() {
 	username := os.Args[1]
 
 	// turnpike.Debug()
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/")
+	c, err := turnpike.NewWebsocketClient(turnpike.JSON, "ws://localhost:8000/", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = c.JoinRealm("turnpike.examples", turnpike.ALLROLES, nil)
+	_, err = c.JoinRealm("turnpike.examples", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	messages := make(chan message)
-	if err := c.Subscribe("chat", func(args []interface{}, kwargs map[string]interface{}) {
+	if err := c.Subscribe("chat", func(topic string, args []interface{}, kwargs map[string]interface{}) {
 		if len(args) == 2 {
 			if from, ok := args[0].(string); !ok {
 				log.Println("First argument not a string:", args[0])

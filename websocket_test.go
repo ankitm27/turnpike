@@ -10,7 +10,7 @@ import (
 
 func newTestWebsocketServer(t *testing.T) (int, Router, io.Closer) {
 	r := NewDefaultRouter()
-	r.RegisterRealm(testRealm, Realm{})
+	r.RegisterRealm(testRealm, &Realm{})
 	s := newWebsocketServer(r)
 	server := &http.Server{
 		Handler: s,
@@ -29,7 +29,7 @@ func TestWSHandshakeJSON(t *testing.T) {
 	port, r, closer := newTestWebsocketServer(t)
 	defer closer.Close()
 
-	client, err := NewWebsocketPeer(JSON, fmt.Sprintf("ws://localhost:%d/", port), "http://localhost")
+	client, err := NewWebsocketPeer(JSON, fmt.Sprintf("ws://localhost:%d/", port), "http://localhost", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestWSHandshakeMsgpack(t *testing.T) {
 	port, r, closer := newTestWebsocketServer(t)
 	defer closer.Close()
 
-	client, err := NewWebsocketPeer(MSGPACK, fmt.Sprintf("ws://localhost:%d/", port), "http://localhost")
+	client, err := NewWebsocketPeer(MSGPACK, fmt.Sprintf("ws://localhost:%d/", port), "http://localhost", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

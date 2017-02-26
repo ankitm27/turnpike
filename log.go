@@ -1,35 +1,58 @@
 package turnpike
 
 import (
-	"errors"
-	"fmt"
 	glog "log"
 	"os"
 )
 
 var (
 	logFlags = glog.Ldate | glog.Ltime | glog.Lshortfile
-	log      *glog.Logger
+	log      Logger
 )
 
-// setup logger for package, writes to /dev/null by default
+// Logger is an interface compatible with log.Logger.
+type Logger interface {
+	Println(v ...interface{})
+	Printf(format string, v ...interface{})
+}
+
+type noopLogger struct{}
+
+func (n noopLogger) Println(v ...interface{})               {}
+func (n noopLogger) Printf(format string, v ...interface{}) {}
+
+// setup logger for package, noop by default
 func init() {
-	if devNull, err := os.Create(os.DevNull); err != nil {
-		panic("could not create logger: " + err.Error())
-	} else if os.Getenv("DEBUG") != "" {
+	if os.Getenv("DEBUG") != "" {
 		log = glog.New(os.Stderr, "", logFlags)
 	} else {
-		log = glog.New(devNull, "", 0)
+		log = noopLogger{}
 	}
 }
 
-// change log output to stderr
+// Debug changes the log output to stderr
 func Debug() {
 	log = glog.New(os.Stderr, "", logFlags)
 }
 
-func logErr(v ...interface{}) error {
-	err := errors.New(fmt.Sprintln(v...))
-	log.Println(err)
+// DebugOff changes the log to a noop logger
+func DebugOff() {
+	log = noopLogger{}
+}
+
+// SetLogger allows users to inject their own logger instead of the default one.
+func SetLogger(l Logger) {
+	log = l
+}
+
+func logErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if l, ok := log.(*glog.Logger); ok {
+		l.Output(2, err.Error())
+	} else {
+		log.Println(err)
+	}
 	return err
 }
