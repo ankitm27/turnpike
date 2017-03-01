@@ -1,11 +1,10 @@
 package turnpike
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/streamrail/concurrent-map"
 )
 
 var defaultWelcomeDetails = map[string]interface{}{
@@ -46,7 +45,8 @@ type Router interface {
 
 // DefaultRouter is the default WAMP router implementation.
 type defaultRouter struct {
-	realms                cmap.ConcurrentMap
+	realms                map[string]*Realm
+	realmsLock            sync.RWMutex
 	closing               bool
 	closeLock             sync.Mutex
 	sessionOpenCallbacks  []func(uint, string)
@@ -56,7 +56,7 @@ type defaultRouter struct {
 // NewDefaultRouter creates a very basic WAMP router.
 func NewDefaultRouter() Router {
 	return &defaultRouter{
-		realms:                cmap.New(),
+		realms:                make(map[string]*Realm),
 		sessionOpenCallbacks:  []func(uint, string){},
 		sessionCloseCallbacks: []func(uint, string){},
 	}
@@ -78,22 +78,23 @@ func (r *defaultRouter) Close() error {
 	}
 	r.closing = true
 	r.closeLock.Unlock()
-	for val := range r.realms.Iter() {
-		if realm, ok := val.Val.(*Realm); ok {
-			realm.Close()
-		} else {
-			log.Printf("defaultRouter.Close: expecting realm, found invalid type: %T", val.Val)
-		}
+	r.realmsLock.RLock()
+	for _, realm := range r.realms {
+		realm.Close()
 	}
+	r.realmsLock.RUnlock()
 	return nil
 }
 
 func (r *defaultRouter) RegisterRealm(uri URI, realm *Realm) error {
-	if _, ok := r.realms.Get(string(uri)); ok {
+	r.realmsLock.Lock()
+	defer r.realmsLock.Unlock()
+	if _, ok := r.realms[string(uri)]; ok {
 		return RealmExistsError(uri)
 	}
 	realm.init()
-	r.realms.Set(string(uri), &realm)
+
+	r.realms[string(uri)] = realm
 	log.Println("registered realm:", uri)
 	return nil
 }
@@ -104,7 +105,7 @@ func (r *defaultRouter) Accept(client Peer) error {
 	if r.closing {
 		logErr(client.Send(&Abort{Reason: ErrSystemShutdown}))
 		logErr(client.Close())
-		return fmt.Errorf("Router is closing, no new connections are allowed")
+		return errors.New("Router is closing, no new connections are allowed")
 	}
 
 	msg, err := GetMessageTimeout(client, 5*time.Second)
@@ -120,14 +121,10 @@ func (r *defaultRouter) Accept(client Peer) error {
 		return fmt.Errorf("protocol violation: expected HELLO, received %s", msg.MessageType())
 	}
 
-	var realm *Realm
-	if val, ok := r.realms.Get(string(hello.Realm)); ok {
-		if realm, ok = val.(*Realm); !ok {
-			logErr(client.Send(&Abort{Reason: ErrNoSuchRealm}))
-			logErr(client.Close())
-			return NoSuchRealmError(hello.Realm)
-		}
-	} else {
+	r.realmsLock.RLock()
+	realm, ok := r.realms[string(hello.Realm)]
+	r.realmsLock.RUnlock()
+	if !ok {
 		logErr(client.Send(&Abort{Reason: ErrNoSuchRealm}))
 		logErr(client.Close())
 		return NoSuchRealmError(hello.Realm)
@@ -184,14 +181,15 @@ func (r *defaultRouter) Accept(client Peer) error {
 
 // GetLocalPeer returns an internal peer connected to the specified realm.
 func (r *defaultRouter) GetLocalPeer(realmURI URI, details map[string]interface{}) (Peer, error) {
-	if val, ok := r.realms.Get(string(realmURI)); !ok {
+	r.realmsLock.RLock()
+	realm, ok := r.realms[string(realmURI)]
+	r.realmsLock.RUnlock()
+	if !ok {
 		return nil, NoSuchRealmError(realmURI)
-	} else if realm, ok := val.(*Realm); !ok {
-		return nil, NoSuchRealmError(realmURI)
-	} else {
-		// TODO: session open/close callbacks?
-		return realm.getPeer(details)
 	}
+
+	// TODO: session open/close callbacks?
+	return realm.getPeer(details)
 }
 
 func (r *defaultRouter) getTestPeer() Peer {
