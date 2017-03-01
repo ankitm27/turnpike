@@ -99,6 +99,8 @@ func (r *defaultRouter) RegisterRealm(uri URI, realm *Realm) error {
 }
 
 func (r *defaultRouter) Accept(client Peer) error {
+	r.closeLock.Lock()
+	defer r.closeLock.Unlock()
 	if r.closing {
 		logErr(client.Send(&Abort{Reason: ErrSystemShutdown}))
 		logErr(client.Close())
