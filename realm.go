@@ -41,9 +41,6 @@ type localClient struct {
 func (r *Realm) getPeer(details map[string]interface{}) (Peer, error) {
 	peerA, peerB := localPipe()
 	sess := &Session{Peer: peerA, ID: NewID(), Details: details, kill: make(chan URI, 1)}
-	if details == nil {
-		details = make(map[string]interface{})
-	}
 	go func() {
 		r.handleSession(sess)
 		sess.Close()
