@@ -1,7 +1,7 @@
-Turnpike [![Build Status](https://drone.io/github.com/jcelliott/turnpike/status.png)](https://drone.io/github.com/jcelliott/turnpike/latest) [![Coverage Status](https://coveralls.io/repos/jcelliott/turnpike/badge.svg?branch=v2)](https://coveralls.io/r/jcelliott/turnpike?branch=v2) [![GoDoc](https://godoc.org/gopkg.in/beatgammit/turnpike?status.svg)](http://godoc.org/gopkg.in/beatgammit/turnpike.v2)
+Turnpike [![Build Status](https://travis-ci.org/cornelk/turnpike.svg?branch=master)](https://travis-ci.org/cornelk/turnpike) [![GoDoc](https://godoc.org/github.com/cornelk/turnpike?status.svg)](https://godoc.org/github.com/cornelk/turnpike) [![Go Report Card](https://goreportcard.com/badge/cornelk/turnpike)](https://goreportcard.com/report/github.com/cornelk/turnpike) [![codecov](https://codecov.io/gh/cornelk/turnpike/branch/master/graph/badge.svg)](https://codecov.io/gh/cornelk/turnpike)
 ===
 
-Go implementation of [WAMP](http://wamp.ws/) - The Web Application Messaging Protocol
+Golang implementation of [WAMP](http://wamp.ws/) - The Web Application Messaging Protocol
 
 > WAMP ("The Web Application Messaging Protocol") is a communication protocol
 > that enables distributed application architectures, with application
@@ -18,23 +18,16 @@ basic stand-alone router. The router library can be used to embed a WAMP router
 in another application, or to build a custom router implementation. The client
 library can be used to communicate with any WAMP router.
 
-Status
----
-
-Turnpike v2 is still under development, but is getting close to a stable
-release. If you have any feedback or suggestions, please
-[open an issue](https://github.com/beatgammit/turnpike/issues/new).
-
 Installation
 ---
 
 Library:
 
-    go get -u gopkg.in/beatgammit/turnpike.v2
+    go get -u github.com/cornelk/turnpike
 
 Stand-alone router:
 
-    go get -u gopkg.in/beatgammit/turnpike.v2/turnpike
+    go get -u github.com/cornelk/turnpike/turnpike
 
 Client library usage
 ---
@@ -54,7 +47,7 @@ import (
 	"log"
 	"net/http"
 
-	"gopkg.in/beatgammit/turnpike.v2"
+	"github.com/cornelk/turnpike"
 )
 
 func main() {
