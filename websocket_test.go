@@ -10,7 +10,9 @@ import (
 
 func newTestWebsocketServer(t *testing.T) (int, Router, io.Closer) {
 	r := NewDefaultRouter()
-	r.RegisterRealm(testRealm, &Realm{})
+	if err := r.RegisterRealm(testRealm, &Realm{}); err != nil {
+		t.Fatal(err)
+	}
 	s := newWebsocketServer(r)
 	server := &http.Server{
 		Handler: s,

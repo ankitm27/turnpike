@@ -26,9 +26,12 @@ func (client *basicPeer) Close() error {
 
 func basicConnect(t *testing.T, client *basicPeer, server Peer) Router {
 	r := NewDefaultRouter()
-	r.RegisterRealm(testRealm, &Realm{})
-
-	client.Send(&Hello{Realm: testRealm})
+	if err := r.RegisterRealm(testRealm, &Realm{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Send(&Hello{Realm: testRealm}); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.Accept(server); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +56,7 @@ func TestHandshake(t *testing.T) {
 	client.outgoing <- &Goodbye{}
 	select {
 	case <-time.After(time.Millisecond):
-		t.Errorf("No goodbye message received after sending goodbye")
+		t.Error("No goodbye message received after sending goodbye")
 	case msg := <-client.incoming:
 		if _, ok := msg.(*Goodbye); !ok {
 			t.Errorf("Expected GOODBYE, actually got: %s", msg.MessageType())
@@ -68,10 +71,11 @@ func TestInvalidRealm(t *testing.T) {
 	c, server := localPipe()
 
 	client := &basicPeer{c}
-	client.Send(&Hello{Realm: "does.not.exist"})
-	err := r.Accept(server)
-	if err == nil {
-		t.Error(err)
+	if err := client.Send(&Hello{Realm: "does.not.exist"}); err != nil {
+		t.Fatal("Expected no error")
+	}
+	if err := r.Accept(server); err == nil {
+		t.Fatal("Expected error")
 	}
 
 	if len(client.incoming) != 1 {
@@ -79,7 +83,7 @@ func TestInvalidRealm(t *testing.T) {
 	}
 
 	if msg := <-client.incoming; msg.MessageType() != ABORT {
-		t.Errorf("Expected the handshake to be aborted")
+		t.Error("Expected the handshake to be aborted")
 	}
 }
 
