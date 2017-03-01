@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/streamrail/concurrent-map"
 )
 
 const (
@@ -27,7 +25,8 @@ type Realm struct {
 	Authenticators   map[string]Authenticator
 	// DefaultAuth      func(details map[string]interface{}) (map[string]interface{}, error)
 	AuthTimeout time.Duration
-	clients     cmap.ConcurrentMap
+	clients     map[string]*Session
+	clientsLock sync.RWMutex
 	localClient *localClient
 
 	lock sync.RWMutex
@@ -51,21 +50,18 @@ func (r *Realm) getPeer(details map[string]interface{}) (Peer, error) {
 
 // Close disconnects all clients after sending a goodbye message
 func (r *Realm) Close() {
-	iter := r.clients.Iter()
-	for client := range iter {
-		sess, isSession := client.Val.(*Session)
-		if !isSession {
-			continue
-		}
+	r.clientsLock.RLock()
+	for _, sess := range r.clients {
 		sess.kill <- ErrSystemShutdown
 	}
+	r.clientsLock.RUnlock()
 }
 
 func (r *Realm) init() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.clients = cmap.New()
+	r.clients = make(map[string]*Session)
 
 	if r.localClient == nil {
 		p, _ := r.getPeer(nil)
@@ -181,19 +177,24 @@ func (r *Realm) doOne(c <-chan Message, sess *Session) bool {
 }
 
 func (r *Realm) handleSession(sess *Session) {
+	r.clientsLock.Lock()
+	r.clients[string(sess.ID)] = sess
+	r.clientsLock.Unlock()
+
 	r.lock.RLock()
-	r.clients.Set(string(sess.ID), sess)
 	r.localClient.onJoin(sess.Details)
 	r.lock.RUnlock()
 
 	defer func() {
-		r.lock.RLock()
-		defer r.lock.RUnlock()
+		r.clientsLock.Lock()
+		delete(r.clients, string(sess.ID))
+		r.clientsLock.Unlock()
 
-		r.clients.Remove(string(sess.ID))
+		r.lock.RLock()
 		r.Broker.RemoveSession(sess)
 		r.Dealer.RemoveSession(sess)
 		r.localClient.onLeave(sess.ID)
+		r.lock.RUnlock()
 	}()
 	c := sess.Receive()
 	// TODO: what happens if the realm is closed?
